@@ -44,12 +44,20 @@
             );
             fmt = crane.cargoFmt { inherit src; };
           };
-          packages.default = coffee-break;
+          packages = {
+            inherit coffee-break;
+            default = coffee-break;
+          };
           apps.default = flake-utils.lib.mkApp { drv = coffee-break; };
+
           devShells.default = crane.devShell {
             checks = self.checks.${system};
             packages = with pkgs; [ rust-analyzer ];
           };
+
         }
-      );
+      )
+    // {
+      overlays.default = final: _: { inherit (self.packages.${final.system}) coffee-break; };
+    };
 }
