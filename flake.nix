@@ -34,7 +34,6 @@
         in
         {
           checks = {
-            inherit coffee-break;
             clippy = crane.cargoClippy (
               commonArgs
               // {
@@ -51,7 +50,7 @@
           apps.default = flake-utils.lib.mkApp { drv = coffee-break; };
 
           devShells.default = crane.devShell {
-            checks = self.checks.${system};
+            inputsFrom = [ coffee-break ];
             packages = with pkgs; [ rust-analyzer ];
           };
 
