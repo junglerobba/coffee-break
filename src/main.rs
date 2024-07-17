@@ -1,5 +1,6 @@
 use std::{
     io::{self, BufRead, Write},
+    os::unix::process::CommandExt,
     process::Command,
     str::FromStr,
 };
@@ -72,7 +73,7 @@ fn main() -> Result<(), Error> {
             child.arg(format!("-{flags}"));
         }
         child.arg("-t").arg(diff.to_string());
-        child.spawn()?.wait()?;
+        child.exec();
     }
     Ok(())
 }
