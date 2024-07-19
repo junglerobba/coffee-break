@@ -15,12 +15,18 @@ use sysinfo::Process;
 
 mod flags;
 
+/// Small wrapper around darwin's caffeinate utility in order to improve usability,
+/// especially for putting it in the background or caffeinating until a certain time
+/// without needing a calculator
 #[derive(Parser, Debug)]
 struct Cli {
     /// How long to caffeinate. Accepts either a timestamp (18:00) or a duration (8h)
     time: Option<String>,
     #[command(flatten)]
     flags: CaffeinateFlags,
+    /// Only check current status and optionally stop caffeination
+    #[arg(short, long, action, conflicts_with = "time")]
+    check: bool,
 }
 
 fn main() -> Result<(), Error> {
@@ -30,52 +36,66 @@ fn main() -> Result<(), Error> {
     let mut system = sysinfo::System::new();
     system.refresh_all();
 
+    let diff = args.time.and_then(|time| get_duration(&time, &now).ok());
     for p in system.processes_by_exact_name("caffeinate") {
         if let Some(time) = get_active_caffeinate_time(p) {
-            println!("Already caffeinating until {}", time);
-            let flags: CaffeinateFlags = p.into();
-            if flags.any() {
-                println!("Currently suspending {:#}", flags);
-            } else {
-                println!("Currently not suspending anything");
-            }
-            let msg = match args.time {
-                Some(_) => "Kill existing and get fresh coffee instead? [y/N] ",
-                None => "Throw away some perfectly good coffee? [y/N] ",
-            };
-            print!("{}", msg);
-            io::stdout().flush()?;
-            let stdin = io::stdin();
-            let mut line = String::new();
-            stdin.lock().read_line(&mut line)?;
-
-            if line.trim().to_lowercase() == "y" {
-                p.kill();
-            } else {
+            print!("Already caffeinating until {}, ", time);
+        } else {
+            if !args.check && diff.is_none() {
+                println!("Already caffeinating indefinitely, exiting");
                 return Ok(());
             }
+            print!("Caffeinating indefinitely, ");
+        }
+
+        let flags: CaffeinateFlags = p.into();
+        if flags.any() {
+            println!("currently suspending {:#}", flags);
+        } else {
+            println!("currently not suspending anything");
+        }
+
+        print!("Kill existing caffeination? [y/N] ");
+        io::stdout().flush()?;
+        let stdin = io::stdin();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line)?;
+
+        if line.trim().to_lowercase() == "y" {
+            p.kill();
+        } else {
+            return Ok(());
         }
     }
-    let Some(time) = args.time else { return Ok(()) };
 
-    let target = try_time(&time, &now).or_else(|_| try_duration(&time, &now))?;
-
-    println!("☕️ Caffeinating until {}", target.to_rfc2822());
-
-    let diff = target - now;
-    let diff = diff.num_seconds();
+    if args.check {
+        return Ok(());
+    }
+    if diff.is_none() {
+        println!("Caffeinating indefinitely");
+    }
 
     let flags = args.flags;
-
     if let Ok(Fork::Child) = daemon(false, false) {
         let mut child = Command::new("/usr/bin/caffeinate");
         if flags.any() {
             child.arg(format!("-{flags}"));
         }
-        child.arg("-t").arg(diff.to_string());
+        if let Some(diff) = diff {
+            child.arg("-t").arg(diff.to_string());
+        }
         child.exec();
     }
     Ok(())
+}
+
+fn get_duration(time: &str, now: &DateTime<Local>) -> Result<i64, Error> {
+    let target = try_time(time, now).or_else(|_| try_duration(time, now))?;
+
+    println!("☕️ Caffeinating until {}", target.to_rfc2822());
+
+    let diff = target - now;
+    Ok(diff.num_seconds())
 }
 
 fn try_time(input: &str, now: &DateTime<Local>) -> Result<DateTime<Local>, Error> {
@@ -98,10 +118,12 @@ fn try_duration(input: &str, now: &DateTime<Local>) -> Result<DateTime<Local>, E
 }
 
 fn get_active_caffeinate_time(process: &Process) -> Option<DateTime<Local>> {
-    let start_time = DateTime::from_timestamp(process.start_time() as i64, 0)?;
-    let start_time: DateTime<Local> = DateTime::from(start_time);
     let index = process.cmd().iter().position(|arg| *arg == "-t")?;
     let seconds: i64 = process.cmd().get(index + 1)?.parse().ok()?;
     let seconds = TimeDelta::seconds(seconds);
+
+    let start_time = DateTime::from_timestamp(process.start_time() as i64, 0)?;
+    let start_time: DateTime<Local> = DateTime::from(start_time);
+
     Some(start_time + seconds)
 }
