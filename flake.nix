@@ -30,7 +30,19 @@
             strictDeps = true;
           };
           cargoArtifacts = crane.buildDepsOnly commonArgs;
-          coffee-break = crane.buildPackage (commonArgs // { inherit cargoArtifacts; });
+          coffee-break = crane.buildPackage (
+            commonArgs
+            // {
+              inherit cargoArtifacts;
+              nativeBuildInputs = [ pkgs.installShellFiles ];
+              postInstall = ''
+                for shell in bash fish zsh; do
+                  installShellCompletion --cmd coffee-break \
+                    --$shell <($out/bin/coffee-break --completions $shell)
+                done
+              '';
+            }
+          );
         in
         {
           checks = {

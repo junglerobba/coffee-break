@@ -7,18 +7,22 @@ use std::{
 
 use anyhow::{Error, Result};
 use chrono::{DateTime, Duration, Local, NaiveTime, TimeDelta};
-use clap::{command, Parser};
+use clap::{command, CommandFactory, Parser};
+use clap_complete::Shell;
+use completions::print_completions;
 use duration_string::DurationString;
 use flags::CaffeinateFlags;
 use fork::{daemon, Fork};
 use sysinfo::Process;
 
+mod completions;
 mod flags;
 
 /// Small wrapper around darwin's caffeinate utility in order to improve usability,
 /// especially for putting it in the background or caffeinating until a certain time
 /// without needing a calculator
 #[derive(Parser, Debug)]
+#[command()]
 struct Cli {
     /// How long to caffeinate. Accepts either a timestamp (18:00) or a duration (8h)
     time: Option<String>,
@@ -27,10 +31,19 @@ struct Cli {
     /// Only check current status and optionally stop caffeination
     #[arg(short, long, action, conflicts_with = "time")]
     check: bool,
+    #[arg(long = "completions", value_enum)]
+    generator: Option<Shell>,
 }
 
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
+
+    if let Some(generator) = args.generator {
+        let mut cmd = Cli::command();
+        print_completions(generator, &mut cmd);
+        return Ok(());
+    }
+
     let now = Local::now();
 
     let mut system = sysinfo::System::new();
