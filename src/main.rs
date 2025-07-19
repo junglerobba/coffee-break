@@ -11,7 +11,7 @@ use clap::{command, CommandFactory, Parser};
 use clap_complete::Shell;
 use completions::print_completions;
 use duration_string::DurationString;
-use flags::CaffeinateFlags;
+use flags::{CaffeinateFlags, CaffeinateFlagsArgs};
 use fork::{daemon, Fork};
 use sysinfo::Process;
 
@@ -27,7 +27,7 @@ struct Cli {
     /// How long to caffeinate. Accepts either a timestamp (18:00) or a duration (8h)
     time: Option<String>,
     #[command(flatten)]
-    flags: CaffeinateFlags,
+    flags: CaffeinateFlagsArgs,
     /// Only check current status and optionally stop caffeination
     #[arg(short, long, action, conflicts_with = "time")]
     check: bool,
@@ -88,7 +88,7 @@ fn main() -> Result<(), Error> {
         println!("Caffeinating indefinitely");
     }
 
-    let flags = args.flags;
+    let flags: CaffeinateFlags = args.flags.into();
     if let Ok(Fork::Child) = daemon(false, false) {
         let mut child = Command::new("/usr/bin/caffeinate");
         if flags.any() {
