@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Error, Result};
 use chrono::{DateTime, Duration, Local, NaiveTime, TimeDelta};
-use clap::{command, CommandFactory, Parser};
+use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use completions::print_completions;
 use duration_string::DurationString;
@@ -49,7 +49,10 @@ fn main() -> Result<(), Error> {
     let mut system = sysinfo::System::new();
     system.refresh_all();
 
-    let diff = args.time.and_then(|time| get_duration(&time, &now).ok());
+    let diff = args
+        .time
+        .map(|time| get_duration(&time, &now))
+        .transpose()?;
     for p in system.processes_by_exact_name("caffeinate") {
         if let Some(time) = get_active_caffeinate_time(p) {
             print!("Already caffeinating until {}, ", time);
@@ -88,7 +91,7 @@ fn main() -> Result<(), Error> {
         println!("Caffeinating indefinitely");
     }
 
-    let flags: CaffeinateFlags = args.flags.into();
+    let flags = CaffeinateFlags::from(args.flags);
     if let Ok(Fork::Child) = daemon(false, false) {
         let mut child = Command::new("/usr/bin/caffeinate");
         if flags.any() {
@@ -97,7 +100,7 @@ fn main() -> Result<(), Error> {
         if let Some(diff) = diff {
             child.arg("-t").arg(diff.to_string());
         }
-        child.exec();
+        return Err(child.exec().into());
     }
     Ok(())
 }
