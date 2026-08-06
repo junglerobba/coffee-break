@@ -64,6 +64,7 @@
             packages = with pkgs; [
               rustToolchain
               rust-analyzer
+              cargo-audit
             ];
           };
 
